@@ -30,7 +30,7 @@ namespace HierarchicalBitmapIndex
 		/// <summary>
 		/// Binary serach tree of nodes.
 		/// </summary>
-		public BPlusTree<byte, List<int>> NodeTree;
+		public BPlusTree<byte, int> NodeTree;
 	}
 
 	/// <summary>
@@ -89,20 +89,7 @@ namespace HierarchicalBitmapIndex
 			// для этого нужно пробежаться по всем бранчам и сравнить их битовые маски
 			// сравнение происходит операцией ИЛИ
 			// 2. нашли номер ветки, записываем кортеж в дерево
-			var tree = _branchNodes[findIndexOfBranchNode(key)].NodeTree;
-
-			List<int> values;
-			if (! tree.TryGetValue(key, out values))
-			{
-				values = new List<int>();
-			}
-
-			// ищем элемент, если его нет - добавляем
-			if (-1 == values.LastIndexOf(value))
-			{
-				values.Add(value);
-				tree[key] = values;
-			}
+			_branchNodes[findIndexOfBranchNode(key)].NodeTree[key] = value;
 		}
 		
 		/// <summary>
@@ -113,23 +100,7 @@ namespace HierarchicalBitmapIndex
 		/// <param name="newValue">New value.</param>
 		public void Update(byte key, int oldValue, int newValue)
 		{
-			var tree = _branchNodes[findIndexOfBranchNode(key)].NodeTree;
-
-			List<int> values;
-			if (!tree.TryGetValue(key, out values))
-			{
-				values = new List<int>();
-			}
-
-			// ищем элемент, если он есть - удаляем старый
-			if (-1 != values.LastIndexOf(oldValue))
-			{
-				values.Remove(oldValue);
-			}
-
-			// добавляем элемент в список
-			values.Add(newValue);
-			tree[key] = values;
+			_branchNodes[findIndexOfBranchNode(key)].NodeTree[key] = newValue;
 		}
 
 		/// <summary>
@@ -138,9 +109,13 @@ namespace HierarchicalBitmapIndex
 		/// <param name="key">Key to delete.</param>
 		public void Delete(byte key)
 		{
-			_branchNodes[findIndexOfBranchNode(key)].NodeTree[key] = new List<int>();
+			var tree = _branchNodes[findIndexOfBranchNode(key)].NodeTree;
+			int value;
+			tree.TryRemove(key, out value);
 		}
-		
+
+		#region Deletes an element with specified key and value (unsuppported with an index structure without duplcates)
+		/*
 		/// <summary>
 		/// Deletes an element with specified key and value.
 		/// </summary>
@@ -163,18 +138,18 @@ namespace HierarchicalBitmapIndex
 				tree[key] = values;
 			}
 		}
-
+		*/
+		#endregion
+		
 		/// <summary>
 		/// Search an element in the index.
 		/// </summary>
 		/// <param name="key">Key to search.</param>
+		/// <param name="value">Value.</param>
 		/// <returns>List of tuples which key is equal to the element.</returns>
-		public List<int> Search(byte key)
+		public bool Search(byte key, out int value)
 		{
-			List<int> values;
-			_branchNodes[findIndexOfBranchNode(key)].NodeTree.TryGetValue(key, out values);
-
-			return values;
+			return _branchNodes[findIndexOfBranchNode(key)].NodeTree.TryGetValue(key, out value);
 		}
 
 		/// <summary>
@@ -234,14 +209,14 @@ namespace HierarchicalBitmapIndex
 			}
 		}
 
-		private BPlusTree<byte, List<int>> initBTree()
+		private BPlusTree<byte, int> initBTree()
 		{
-			var options = new BPlusTree<byte, List<int>>.OptionsV2(PrimitiveSerializer.Byte, PrimitiveSerializer.Int32);
+			var options = new BPlusTree<byte, int>.OptionsV2(PrimitiveSerializer.Byte, PrimitiveSerializer.Int32);
 			options.CalcBTreeOrder(sizeof(byte) * 8, sizeof(int) * 8);
 			options.CreateFile = CreatePolicy.Always;
 			options.FileName = Path.GetTempFileName();
 			
-			return new BPlusTree<byte, List<int>>(options);
+			return new BPlusTree<byte, int>(options);
 
 			/*
 			 options.CreateFile = CreatePolicy.Never;
@@ -324,10 +299,20 @@ namespace HierarchicalBitmapIndex
 
 			foreach (Tuple<byte, int> tuple in tableWithTuples)
 			{
-				indexTree.Add(tuple);
+				indexTree.Add(tuple.Item1, tuple.Item2);
 			}
 
-			List<Tuple<byte, int>> searchResults = indexTree.Search(4);
+			byte key = 234;
+			int searchedValue;
+			bool result = indexTree.Search(key, out searchedValue);
+			if (result)
+			{
+				Console.WriteLine("Found, key = {0}, value = {1}.", key, searchedValue);
+			}
+			else
+			{
+				Console.WriteLine("Key not found.");
+			}
 
 			Console.ReadLine();
 
@@ -337,7 +322,7 @@ namespace HierarchicalBitmapIndex
 
 			#region HBI benchmarking
 			
-			List<Tuple<byte, int>> table = generateTuples(100);
+			List<Tuple<byte, int>> table = generateTuples(254);
 
 			var searchItem = new { ItemKey = table[0].Item1, ItemValue = table[0].Item2 };
 
@@ -388,7 +373,7 @@ namespace HierarchicalBitmapIndex
 			{
 				foreach (Tuple<byte, int> tuple in table)
 				{
-					tree.Add(tuple);
+					tree.Add(tuple.Item1, tuple.Item2);
 				}
 
 				foreach (Tuple<byte, int> tuple in table)
@@ -406,7 +391,7 @@ namespace HierarchicalBitmapIndex
 
 				foreach (Tuple<byte, int> tuple in table)
 				{
-					tree.Add(tuple);
+					tree.Add(tuple.Item1, tuple.Item2);
 				}
 
 				stopwatch.Stop();
@@ -422,9 +407,10 @@ namespace HierarchicalBitmapIndex
 
 			stopwatch.Reset();
 			stopwatch.Start();
+			int value;
 			while (stopwatch.ElapsedMilliseconds < warmupSeconds)
 			{
-				tree.Search(searchItem.ItemKey);
+				tree.Search(searchItem.ItemKey, out value);
 			}
 			stopwatch.Stop();
 
@@ -434,7 +420,7 @@ namespace HierarchicalBitmapIndex
 				stopwatch.Reset();
 				stopwatch.Start();
 
-				tree.Search(searchItem.ItemKey);
+				tree.Search(searchItem.ItemKey, out value);
 				
 				stopwatch.Stop();
 				Console.WriteLine("Elapsed: {0} ms", stopwatch.ElapsedMilliseconds);
@@ -458,7 +444,7 @@ namespace HierarchicalBitmapIndex
 
 				foreach (Tuple<byte, int> tuple in table)
 				{
-					tree.Add(tuple);
+					tree.Add(tuple.Item1, tuple.Item2);
 				}
 			}
 			stopwatch.Stop();
@@ -480,7 +466,6 @@ namespace HierarchicalBitmapIndex
 			}
 			Console.WriteLine(Environment.NewLine + "Total elapsed: {0} ms", seconds / 10);
 			Console.WriteLine(Environment.NewLine);
-
 
 			#endregion
 
@@ -523,7 +508,7 @@ namespace HierarchicalBitmapIndex
 			{
 				byte[] bytes = new byte[1];
 				random.NextBytes(bytes);
-				tuples.Add(new Tuple<byte, int>((byte)i, i + 1));
+				tuples.Add(new Tuple<byte, int>((byte)i, tuplesAmount - i + 1));
 			}
 
 			return tuples;
