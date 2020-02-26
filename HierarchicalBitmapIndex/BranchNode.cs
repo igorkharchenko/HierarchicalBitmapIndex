@@ -5,7 +5,7 @@ namespace HierarchicalBitmapIndex
 	/// <summary>
 	/// Branch node.
 	/// </summary>
-	class BranchNode
+	class BranchNode<TKey, TValue>
 	{
 		/// <summary>
 		/// Bitmap of branch node.
@@ -15,6 +15,6 @@ namespace HierarchicalBitmapIndex
 		/// <summary>
 		/// Binary serach tree of nodes.
 		/// </summary>
-		public BPlusTree<int, int> NodeTree;
+		public BPlusTree<TKey, TValue> NodeTree;
 	}
 }

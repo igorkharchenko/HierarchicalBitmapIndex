@@ -30,7 +30,7 @@ namespace HierarchicalBitmapIndex
 		/// <returns>Bitmap index configuration</returns>
 		private static int[] GetHBIConfiguration()
 		{
-			return new int[] { 6, 4, 21 };
+			// return new int[] { 6, 4, 21 };
 			// 0111 1110 | 0000 0000 | 0000 0000 | 0000 0000 = 2113929216 (6 единиц)
 			// 0000 0001 | 1110 0000 | 0000 0000 | 0000 0000 = 31457280   (4 единицы)
 			// 0000 0000 | 0001 1111 | 1111 1111 | 1111 1111 = 2097151    (21 единица)
@@ -40,7 +40,7 @@ namespace HierarchicalBitmapIndex
 			// 0000 0001 | 1111 1100 | 0000 0000 | 0000 0000 = 33292288   (7 единиц)
 			// 0000 0000 | 0000 0011 | 1111 1111 | 1111 1111 = 16383      (18 единиц)
 
-			// return new int[] { 2, 1, 28 };
+			return new int[] { 2, 1, 28 };
 			// 0110 0000 | 0000 0000 | 0000 0000 | 0000 0000 = 1610612736 (2 единицы)
 			// 0001 0000 | 0000 0000 | 0000 0000 | 0000 0000 = 268435456  (1 единица)
 			// 0000 1111 | 1111 1111 | 1111 1111 | 1111 1111 = 268435455  (28 единиц)
@@ -52,9 +52,9 @@ namespace HierarchicalBitmapIndex
 			// 1. для нахождения одного элемента;
 			// 2. для нахождения нескольких элементов.
 			
-			var tree = new BitmapIndex(GetHBIConfiguration());
+			var tree = new BitmapIndex<int, int>(GetHBIConfiguration());
 
-			int amountOfTuples = 10000;
+			int amountOfTuples = 50000;
 			// values to search: for worst, average and best cases
 			var searchedValues = new SearchedValues(worstCase: 528216031, averageCase: 2087391, bestCase: 58);
 
@@ -164,7 +164,7 @@ namespace HierarchicalBitmapIndex
 			// ==================================================
 			Console.WriteLine("Search an item in B+ tree...");
 
-			var bPlusTree = (new BPlusTreeBuilder()).build();
+			var bPlusTree = (new BPlusTreeBuilder<int, int>()).build();
 
 			foreach (Tuple<int, int> tuple in table)
 			{
@@ -224,7 +224,7 @@ namespace HierarchicalBitmapIndex
 			List<KeyValuePair<int, int>> values;
 			while (stopwatch.ElapsedMilliseconds < warmupSeconds)
 			{
-				tree.SearchRange(0, 100, out values);
+				tree.SearchRange(1, (Int32.MaxValue - 1), out values);
 			}
 			stopwatch.Stop();
 
@@ -270,7 +270,7 @@ namespace HierarchicalBitmapIndex
 				stopwatch.Reset();
 				stopwatch.Start();
 
-				tree.Search(searchedValues.WorstCase, out value);
+				bPlusTree.EnumerateRange(1, (int.MaxValue - 1));
 				cases[0] = bPlusTree.AmountOfOperations;
 				
 				stopwatch.Stop();
@@ -292,10 +292,9 @@ namespace HierarchicalBitmapIndex
 			Environment.Exit(0);
 		}
 
+		#region learning dictionary structure
 		static void learningDictionaryStructure()
 		{
-			#region learning dictionary structure
-
 			var searchedValues = new { WorstCase = 528216031, AverageCase = 2087391, BestCase = 58 };
 
 			List<Tuple<int, int>> table = new List<Tuple<int, int>>();
@@ -305,7 +304,7 @@ namespace HierarchicalBitmapIndex
 			table.Add(new Tuple<int, int>(4, 45));
 			table.Add(new Tuple<int, int>(5, 100500));
 
-			var bPlusTree = (new BPlusTreeBuilder()).build();
+			var bPlusTree = (new BPlusTreeBuilder<int, int>()).build();
 
 			foreach (Tuple<int, int> tuple in table)
 			{
@@ -334,33 +333,12 @@ namespace HierarchicalBitmapIndex
 
 			Console.Read();
 			Environment.Exit(0);
-
-			/*
-			var btree = new BTreeDictionary<int, int>();
-			
-			btree.Add(5, 1);
-			btree.Add(7, 2);
-			btree.Add(6, 3);
-			btree.Add(1, 4);
-			btree.Add(1, 5);
-			btree.Add(1, 6);
-
-			int value;
-			var result = btree.TryGetValue(1, out value);
-
-			Console.WriteLine(string.Format("Element with key = {0}: {0}, result = {1}", value, result) + Environment.NewLine);
-			Console.WriteLine(string.Format("Element exists? {0}", btree.ContainsKey(1)));
-
-			Console.Read();
-			Environment.Exit(0);
-			*/
-			#endregion
 		}
+		#endregion
 
+		#region HBI benchmarking
 		static void HBIBenchmarking()
 		{
-			#region HBI benchmarking
-			/*
 			List<Tuple<int, int>> table = generateTuples(4000);
 
 			var searchItem = new { ItemKey = table[0].Item1, ItemValue = table[0].Item2 };
@@ -408,7 +386,7 @@ namespace HierarchicalBitmapIndex
 			// 0000 0001 | 1111 1100 | 0000 0000 | 0000 0000 = 33292288   (7 единиц)
 			// 0000 0000 | 0000 0011 | 1111 1111 | 1100 0000 = 262080     (12 единиц)
 			// 0000 0000 | 0000 0000 | 0000 0000 | 0011 1111 = 63         (6 единиц)
-			var tree = new BitmapIndex(new int[] { 6, 7, 12, 6 });
+			var tree = new BitmapIndex<int, int>(new int[] { 6, 7, 12, 6 });
 
 			stopwatch.Reset();
 			stopwatch.Start();
@@ -514,10 +492,10 @@ namespace HierarchicalBitmapIndex
 			}
 			Console.WriteLine(Environment.NewLine + "Total elapsed: {0} ms", seconds / 10);
 			Console.WriteLine(Environment.NewLine);
-			*/
-			#endregion
 		}
-		
+
+		#endregion
+
 		/// <summary>
 		/// Search an item in tuples. 
 		/// This is an imitation of full table scan operation.
@@ -542,7 +520,7 @@ namespace HierarchicalBitmapIndex
 
 			Random random = new Random();
 
-			int maxValue = (int.MaxValue - 1);
+			int maxValue = (int.MaxValue - 1) / 3;
 			//  int maxValue = (int.MaxValue - 1);
 
 			for (int i = 0; i < tuplesAmount; i++)

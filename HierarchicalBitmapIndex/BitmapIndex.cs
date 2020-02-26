@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Collections;
 
 namespace HierarchicalBitmapIndex
 {
@@ -10,12 +12,12 @@ namespace HierarchicalBitmapIndex
 	/// TODO переделать типы данных для хранения ключей и значений на дженерики
 	/// (сразу не сделал как нужно, потому что битовые операции над дженериками выполнять нельзя)
 	/// </summary>
-	class BitmapIndex
+	class BitmapIndex<TKey, TValue>
 	{
 		/// <summary>
 		/// Branch nodes in bitmap tree.
 		/// </summary>
-		private List<BranchNode> _branchNodes = new List<BranchNode>();
+		private List<BranchNode<TKey, TValue>> _branchNodes = new List<BranchNode<TKey, TValue>>();
 
 		/// <summary>
 		/// Amount of branches in tree.
@@ -61,7 +63,7 @@ namespace HierarchicalBitmapIndex
 		/// </summary>
 		~BitmapIndex()
 		{
-			foreach (BranchNode node in _branchNodes)
+			foreach (BranchNode<TKey, TValue> node in _branchNodes)
 			{
 				node.NodeTree.Dispose();
 			}
@@ -75,7 +77,7 @@ namespace HierarchicalBitmapIndex
 		/// </summary>
 		/// <param name="key">Key to add in index.</param>
 		/// <param name="value">Value to add in index.</param>
-		public void Add(int key, int value)
+		public void Add(TKey key, TValue value)
 		{
 			// 1. сначала нужно найти, в какую ветку нужно добавить кортеж,
 			// для этого нужно пробежаться по всем бранчам и сравнить их битовые маски
@@ -90,7 +92,7 @@ namespace HierarchicalBitmapIndex
 		/// <param name="key">Key of element.</param>
 		/// <param name="oldValue">Old value.</param>
 		/// <param name="newValue">New value.</param>
-		public void Update(int key, int oldValue, int newValue)
+		public void Update(TKey key, TValue oldValue, TValue newValue)
 		{
 			_branchNodes[findIndexOfBranchNode(key)].NodeTree[key] = newValue;
 		}
@@ -99,10 +101,10 @@ namespace HierarchicalBitmapIndex
 		/// Deletes all elements from an index with specified key.
 		/// </summary>
 		/// <param name="key">Key to delete.</param>
-		public void Delete(int key)
+		public void Delete(TKey key)
 		{
 			var tree = _branchNodes[findIndexOfBranchNode(key)].NodeTree;
-			int value;
+			TValue value;
 			tree.TryRemove(key, out value);
 		}
 
@@ -113,14 +115,14 @@ namespace HierarchicalBitmapIndex
 		/// </summary>
 		/// <param name="key">Key of element.</param>
 		/// <param name="value">Value of element.</param>
-		public void Delete(int key, int value)
+		public void Delete(TKey key, TValue value)
 		{
 			var tree = _branchNodes[findIndexOfBranchNode(key)].NodeTree;
 
-			List<int> values;
+			List<TValue> values;
 			if (!tree.TryGetValue(key, out values))
 			{
-				values = new List<int>();
+				values = new List<TValue>();
 			}
 
 			// ищем элемент, если он есть - удаляем
@@ -139,9 +141,9 @@ namespace HierarchicalBitmapIndex
 		/// <param name="key">Key to search.</param>
 		/// <param name="value">Value.</param>
 		/// <returns>List of tuples which key is equal to the element.</returns>
-		public bool Search(int key, out int value)
+		public bool Search(TKey key, out TValue value)
 		{
-			BPlusTree<int, int> tree = _branchNodes[findIndexOfBranchNode(key)].NodeTree;
+			BPlusTree<TKey, TValue> tree = _branchNodes[findIndexOfBranchNode(key)].NodeTree;
 			bool result = tree.TryGetValue(key, out value);
 
 			AmountOfOperationsInBPlusTree = tree.AmountOfOperations;
@@ -156,38 +158,54 @@ namespace HierarchicalBitmapIndex
 		/// <param name="end"></param>
 		/// <param name="values"></param>
 		/// <returns></returns>
-		public bool SearchRange(int start, int end, out List<KeyValuePair<int, int>> values)
+		public IEnumerable<KeyValuePair<TKey, TValue>> SearchRange(TKey start, TKey end)
 		{
-			values = new List<KeyValuePair<int, int>>();
+			var values = new List<KeyValuePair<TKey, TValue>>();
 
-			if (start < end)
+			// todo тут лучше через getHashCode сделать, потому что строки конвертацией не сравнишь
+			int rangeStart = Convert.ToInt32(start);
+			if (rangeStart > Convert.ToInt32(end))
+			{
+				throw new Exception("Range start must be greater than range end.");
+			}
+			if (rangeStart < 0)
 			{
 				throw new Exception("Range start must be greater than range end.");
 			}
 
 			int startIndex = findIndexOfBranchNode(start);
-			foreach (BranchNode branchNode in _branchNodes.GetRange(startIndex, _branchesAmount))
+			if (startIndex < 0)
 			{
-				values.AddRange(branchNode.NodeTree.EnumerateRange(start, end).ToList());
+				yield return new KeyValuePair<TKey, TValue>();
 			}
 
-			return true;
+			foreach (BranchNode<TKey, TValue> branchNode in _branchNodes.GetRange(startIndex - 1, _branchesAmount - startIndex))
+			{
+				values = branchNode.NodeTree.EnumerateRange(start, end).ToList();
+				// @todo убрать
+				break;
+			}
+			
+			foreach (KeyValuePair<TKey, TValue> value in values)
+			{
+				yield return value;
+			}
 		}
 
 		/// <summary>
-		/// For benchmark purposes only.
+		/// Only for benchmark purposes.
 		/// Enables count of elements in B+ tree after all elements have been set to trees.
 		/// </summary>
 		public void EnableCountInBPlusTrees()
 		{
-			foreach (BranchNode node in _branchNodes)
+			foreach (BranchNode<TKey, TValue> node in _branchNodes)
 			{
 				node.NodeTree.EnableCount();
 			}
 		}
 
 		/// <summary>
-		/// For benchmark purposes only.
+		/// Only for benchmark purposes.
 		/// Returns list of amounts of elements in each B+ tree.
 		/// </summary>
 		/// <returns></returns>
@@ -195,7 +213,7 @@ namespace HierarchicalBitmapIndex
 		{
 			List<int> amount = new List<int>();
 
-			foreach (BranchNode node in _branchNodes)
+			foreach (BranchNode<TKey, TValue> node in _branchNodes)
 			{
 				amount.Add(node.NodeTree.Count);
 			}
@@ -208,18 +226,18 @@ namespace HierarchicalBitmapIndex
 		/// </summary>
 		/// <param name="key">Key to find in with branch node it is places.</param>
 		/// <returns>Index of branch node.</returns>
-		private int findIndexOfBranchNode(int key)
+		private int findIndexOfBranchNode(TKey key)
 		{
 			// если ключ равен 0, то он точно располагается в самой последней ветке
-			if (0 == key)
+			if (key.Equals(0))
 			{
 				return _branchesAmount - 1;
 			}
 
 			int index = 0;
-			foreach (BranchNode branchNode in _branchNodes)
+			foreach (BranchNode<TKey, TValue> branchNode in _branchNodes)
 			{
-				var result = (int)(branchNode.Key & key);
+				var result = branchNode.Key & Convert.ToInt32(key);
 
 				// если элемент не проходит по маске, то элемента в ветке точно нет
 				if (0 == result)
@@ -240,12 +258,12 @@ namespace HierarchicalBitmapIndex
 		/// </summary>
 		private void initIndex()
 		{
-			int bitmapSize = (sizeof(int) * 8) - 1; // -1, потому что в int max value отсутствует нолик на числовом бите
+			int bitmapSize = (Marshal.SizeOf(typeof(TKey)) * 8) - 1; // -1, потому что в int max value отсутствует нолик на крайнем левом (знаковом) бите
 			int rightOffset = bitmapSize;
 
 			for (int i = 0; i < _branchesAmount; i++)
 			{
-				var branchNode = new BranchNode() { Key = 0, NodeTree = initBTree() };
+				var branchNode = new BranchNode<TKey, TValue>() { Key = 0, NodeTree = initBTree() };
 
 				var bitmapPartSize = _bitmapPartsSizes[i];
 				rightOffset -= bitmapPartSize;
@@ -254,15 +272,19 @@ namespace HierarchicalBitmapIndex
 				// 2. сделать операцию << на sizeof(int) - rightOffset
 
 				// выставляем маску ветки
-				branchNode.Key = (int)(int.MaxValue >> (bitmapSize - bitmapPartSize) << rightOffset);
+				branchNode.Key = (int.MaxValue >> (bitmapSize - bitmapPartSize) << rightOffset);
 
 				_branchNodes.Add(branchNode);
 			}
 		}
 
-		private BPlusTree<int, int> initBTree()
+		/// <summary>
+		/// Initializes B+ tree.
+		/// </summary>
+		/// <returns></returns>
+		private BPlusTree<TKey, TValue> initBTree()
 		{
-			return (new BPlusTreeBuilder()).build();
+			return (new BPlusTreeBuilder<TKey, TValue>()).build();
 		}
 	}
 }
